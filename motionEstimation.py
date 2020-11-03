@@ -44,6 +44,7 @@ import nibabel as nib
 import nipype.algorithms.metrics as nipalg
 import argparse
 import multiprocessing
+import subprocess
 
 
 
@@ -58,8 +59,6 @@ import multiprocessing
 # -------
 # output :
 # 4*4 transformation matrix
-
-
 def Text_file_to_matrix(filename):
    T = np.loadtxt(str(filename), dtype='f')
    return np.mat(T)
@@ -70,7 +69,6 @@ def Text_file_to_matrix(filename):
 # ----------
 # matrix : the matrix to be saved as text file
 # text_filename : desired name of the text file (.mat)
-
 def Matrix_to_text_file(matrix, text_filename):
     np.savetxt(text_filename, matrix, delimiter='  ')
 
@@ -85,8 +83,6 @@ def Matrix_to_text_file(matrix, text_filename):
 # -------
 # output : scalar
 # dice score between the two masks
-
-
 def Bin_dice(rfile,ifile):
 
     tmp=nib.load(rfile) #segmentation
@@ -129,8 +125,6 @@ def nifti_to_array(filename):
 # -------
 # output : scalar
 # overlap between the two blurry masks
-
-
 def Fuzzy_dice(rfile, ifile):
 
     overlap = nipalg.FuzzyOverlap()
@@ -156,11 +150,12 @@ def Binarize_fuzzy_mask(fuzzy_mask, binary_mask, threshold):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='dynMRI')
 
+    # before running this script, add these args through "Run -> Edit Configs"
     parser.add_argument('-s', '--static', help='Static input image', type=str, required = True)
     parser.add_argument('-d', '--dyn', help='Dynamic 4D input image', type=str, required = True)
     parser.add_argument('-m', '--mask', help='Segmentation high-resolution mask image', type=str, required = True,action='append')
     parser.add_argument('-o', '--output', help='Output directory', type=str, required = True)
-    parser.add_argument('-os', '--OperatingSystem', help='Operating system: 0 if Linux and 1 if Mac Os', type=int, default = 0)
+    parser.add_argument('-os', '--OperatingSystem', help='Operating system: 0 if Linux and 1 if Mac Os', type=int, default = 1) # using 1 as it seems that the FSL installed inside the wsl has the same function names as the Mac OS
 
     args = parser.parse_args()
 
@@ -171,8 +166,10 @@ if __name__ == '__main__':
     else:
         call_flirt = 'flirt'
         call_fslsplit = 'fslsplit'
-    
 
+    # (MHH) to run Linux & also specifically FSL commands inside windows (or actually WSL) -> invoke the WSL bash in the "run" mode
+    wsl_bash_run_lnx_cmds = '"' + r'C:\Program Files\WindowsApps\CanonicalGroupLimited.Ubuntu18.04onWindows_1804.2020.824.0_x64__79rhkp1fndgsc\ubuntu1804.exe' + '"' + ' ' + 'run' + ' '
+    wsl_bash_run_fsl_cmds = wsl_bash_run_lnx_cmds + '/usr/local/fsl/bin/'       # concatenate the path where the FSL bins were installed by fslinstaller.py
 
 #######################Output path creation##########################
 
@@ -188,8 +185,8 @@ if __name__ == '__main__':
 ############# split the 4D file into lots of 3D file s###############
 
     output_basename = 'dyn'
-    go = call_fslsplit + ' '+dynamic+' '+outputpath+output_basename
-    os.system(go)
+    go = wsl_bash_run_fsl_cmds + call_fslsplit + ' ' + dynamic + ' ' + outputpath + output_basename
+    subprocess.run(go)
 
 ############ Get the sorted set of 3D time frames ###################
 
@@ -237,8 +234,8 @@ if __name__ == '__main__':
         prefix = dynamicSet[t].split('/')[-1].split('.')[0]
         global_outputimage = outputpath+'flirt_global_static_on_'+prefix+'.nii.gz'
         global_outputmat = outputpath+'global_static_on_'+prefix+'.mat'
-        go_init = call_flirt+' -noresampblur -searchrx -40 40 -searchry -40 40 -searchrz -40 40 -cost mutualinfo  -dof 6 -ref '+refimage+' -in '+movimage+' -out '+global_outputimage+' -omat '+global_outputmat
-        os.system(go_init)
+        go_init = wsl_bash_run_fsl_cmds + call_flirt+' -noresampblur -searchrx -40 40 -searchry -40 40 -searchrz -40 40 -cost mutualinfo  -dof 6 -ref '+refimage+' -in '+movimage+' -out '+global_outputimage+' -omat '+global_outputmat
+        subprocess.run(go_init)
 
 #########################################################################
 
@@ -257,8 +254,8 @@ if __name__ == '__main__':
 
             prefix = dynamicSet[t].split('/')[-1].split('.')[0]
             global_mask= outputpath_boneSet[i]+'/global_mask_'+prefix+'_component_'+str(i)+'.nii.gz'
-            go_propagation = call_flirt +' -applyxfm -noresampblur -ref '+global_imageSet[t]+' -in ' + args.mask[i] + ' -init '+ global_matrixSet[t] + ' -out ' + global_mask  + ' -interp nearestneighbour '
-            os.system(go_propagation)
+            go_propagation = wsl_bash_run_fsl_cmds + call_flirt +' -applyxfm -noresampblur -ref '+global_imageSet[t]+' -in ' + args.mask[i] + ' -init '+ global_matrixSet[t] + ' -out ' + global_mask  + ' -interp nearestneighbour '
+            subprocess.run(go_propagation)
             Binarize_fuzzy_mask(global_mask, global_mask, 0.4)
 
 ##########################################################################
@@ -281,9 +278,9 @@ if __name__ == '__main__':
 
 ###################### Talus registration ################################
             if(i==1):
-                go_init = call_flirt +' -searchrx -40 40 -searchry -40 40 -searchrz -40 40 -cost normcorr -dof 6 -in '+global_imageSet[t]+' -ref '+refimage+' -out '+local_outputimage+' -omat '+local_outputmat +' -inweight '+ global_maskSet[t]
+                go_init = wsl_bash_run_fsl_cmds + call_flirt +' -searchrx -40 40 -searchry -40 40 -searchrz -40 40 -cost normcorr -dof 6 -in '+global_imageSet[t]+' -ref '+refimage+' -out '+local_outputimage+' -omat '+local_outputmat +' -inweight '+ global_maskSet[t]
 
-            os.system(go_init)
+            subprocess.run(go_init)
 
 #### Compute composed transformations from static to each time frame #####
 
@@ -314,8 +311,8 @@ if __name__ == '__main__':
 
             prefix = dynamicSet[t].split('/')[-1].split('.')[0]
             low_resolution_mask = outputpath_boneSet[i]+'/mask_'+prefix+'_component_'+str(i)+'.nii.gz'
-            go_init = call_flirt + ' -applyxfm -noresampblur -ref '+ dynamicSet[t] + ' -in '+ args.mask[i] + ' -out '+ low_resolution_mask + ' -init '+init_matrixSet[t]+ ' -interp nearestneighbour '
-            os.system(go_init)
+            go_init = wsl_bash_run_fsl_cmds + call_flirt + ' -applyxfm -noresampblur -ref '+ dynamicSet[t] + ' -in '+ args.mask[i] + ' -out '+ low_resolution_mask + ' -init '+init_matrixSet[t]+ ' -interp nearestneighbour '
+            subprocess.run(go_init)
             Binarize_fuzzy_mask(low_resolution_mask, low_resolution_mask, 0.4)
 
 ######### Finding the time frame that best align with static image  ########
@@ -361,10 +358,10 @@ if __name__ == '__main__':
         #t=np.argmin(linked_time_frame)
 
 
-        copy= 'cp '+maskSet[t]+ '  '+ output_results
-        os.system(copy) ######copy mask(t) to the final_results folder
-        copy= 'cp '+transformationSet[t]+ '  '+ output_results
-        os.system(copy) ######copy the most accurate estimated transformation in the "final_results" folder
+        copy= wsl_bash_run_lnx_cmds + 'cp '+maskSet[t]+ '  '+ output_results
+        subprocess.run(copy) ######copy mask(t) to the final_results folder
+        copy= wsl_bash_run_lnx_cmds + 'cp '+transformationSet[t]+ '  '+ output_results
+        subprocess.run(copy) ######copy the most accurate estimated transformation in the "final_results" folder
 
         direct_static_on_dynSet=glob.glob(output_results+'/'+direct_transform_basename+'*.mat')
         direct_static_on_dynSet.sort()
@@ -384,8 +381,8 @@ if __name__ == '__main__':
             prefix2 = dynamicSet[t-1].split('/')[-1].split('.')[0]
             outputimage = output_results+'/flirt_'+prefix2+'_on_'+prefix1+'.nii.gz'
             outputmat   = output_results+'/matrix_flirt_'+prefix2+'_on_'+prefix1+'.mat'
-            go = go_init +' -in '+movimage+' -out '+outputimage+ ' -omat '+outputmat + ' -refweight ' +  final_refweightSet[0]
-            os.system(go)
+            go = wsl_bash_run_fsl_cmds + go_init +' -in '+movimage+' -out '+outputimage+ ' -omat '+outputmat + ' -refweight ' +  final_refweightSet[0]
+            subprocess.run(go)
             final_refweightSet=glob.glob(output_results+'/'+mask_basename+'*.nii.gz')
             final_refweightSet.sort()
             direct_transform = output_results+'/direct_static_on_'+prefix2+'_component_'+str(i)+'.mat'
@@ -394,8 +391,8 @@ if __name__ == '__main__':
             direct_static_on_dynSet=glob.glob(output_results+'/'+direct_transform_basename+'*.mat')
             direct_static_on_dynSet.sort()
             out_refweight= output_results+'/mask_'+prefix2+'_component_'+str(i)+'.nii.gz'
-            go_propagation = call_flirt + ' -applyxfm -noresampblur -ref '+dynamicSet[t-1]+' -in ' + args.mask[i] + ' -init '+ direct_static_on_dynSet[0] + ' -out ' +out_refweight  + ' -interp nearestneighbour '
-            os.system(go_propagation)
+            go_propagation = wsl_bash_run_fsl_cmds + call_flirt + ' -applyxfm -noresampblur -ref '+dynamicSet[t-1]+' -in ' + args.mask[i] + ' -init '+ direct_static_on_dynSet[0] + ' -out ' +out_refweight  + ' -interp nearestneighbour '
+            subprocess.run(go_propagation)
 
             t-=1
 
@@ -423,16 +420,16 @@ if __name__ == '__main__':
             prefix2 = dynamicSet[t+1].split('/')[-1].split('.')[0]
             outputimage = output_results+'/flirt_'+prefix2+'_on_'+prefix1+'.nii.gz'
             outputmat   = output_results+'/matrix_flirt_'+prefix2+'_on_'+prefix1+'.mat'
-            go = go_init +' -in '+movimage+' -out '+outputimage+ ' -omat '+outputmat + ' -refweight ' +  final_refweightSet[t]
-            os.system(go)
+            go = wsl_bash_run_fsl_cmds + go_init +' -in '+movimage+' -out '+outputimage+ ' -omat '+outputmat + ' -refweight ' +  final_refweightSet[t]
+            subprocess.run(go)
             direct_transform = output_results+'/direct_static_on_'+prefix2+'_component_'+str(i)+'.mat'
             direct_static_on_dyn=np.dot(inv(Text_file_to_matrix(outputmat)), Text_file_to_matrix(direct_static_on_dynSet[t]))
             Matrix_to_text_file(direct_static_on_dyn, direct_transform)
             direct_static_on_dynSet=glob.glob(output_results+'/'+direct_transform_basename+'*.mat')
             direct_static_on_dynSet.sort()
             out_refweight= output_results+'/mask_'+prefix2+'_component_'+str(i)+'.nii.gz'
-            go_propagation = call_flirt + ' -applyxfm -noresampblur -ref '+dynamicSet[t+1]+' -in ' + args.mask[i] + ' -init '+ direct_static_on_dynSet[t+1] + ' -out ' +out_refweight  + ' -interp nearestneighbour '
-            os.system(go_propagation)
+            go_propagation = wsl_bash_run_fsl_cmds + call_flirt + ' -applyxfm -noresampblur -ref '+dynamicSet[t+1]+' -in ' + args.mask[i] + ' -init '+ direct_static_on_dynSet[t+1] + ' -out ' +out_refweight  + ' -interp nearestneighbour '
+            subprocess.run(go_propagation)
             final_refweightSet=glob.glob(output_results+'/'+mask_basename+'*.nii.gz')
             final_refweightSet.sort()
 
@@ -458,9 +455,9 @@ if __name__ == '__main__':
             prefix1 = dynamicSet[t].split('/')[-1].split('.')[0]
             prefix2 = dynamicSet[t+1].split('/')[-1].split('.')[0]
 
-            go1= 'mv '+ propagation_matrixSet[t] +' '+ outputpath_boneSet[i]+'/matrix_flirt_'+prefix1+'_on_'+prefix2+'.mat'
-            go2= 'mv '+ propagation_imageSet[t] +' '+ outputpath_boneSet[i]+'/flirt_'+prefix1+'_on_'+prefix2+'.nii.gz'
-            os.system(go1)
-            os.system(go2)
+            go1= wsl_bash_run_lnx_cmds + 'mv '+ propagation_matrixSet[t] +' '+ outputpath_boneSet[i]+'/matrix_flirt_'+prefix1+'_on_'+prefix2+'.mat'
+            go2= wsl_bash_run_lnx_cmds + 'mv '+ propagation_imageSet[t] +' '+ outputpath_boneSet[i]+'/flirt_'+prefix1+'_on_'+prefix2+'.nii.gz'
+            subprocess.run(go1)
+            subprocess.run(go2)
 
     print(np.argmax(linked_time_frame))
