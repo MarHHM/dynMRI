@@ -1,3 +1,5 @@
+## [MHH] This code corresponds to sec. 2.3.2 in [Makki 2019] (non-rigid estimation of dense deformation field between S & each frame D_k (using log-eucledian polyaffine framework LEPF (eq. 2 -> Arsigny 2005)))
+
 # -*- coding: utf-8 -*-
 
 """
