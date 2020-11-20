@@ -1,3 +1,6 @@
+## - [MHH] This code corresponds to sec. 2.3.3 in [Makki 2019] ("Fast computation" of non-rigid estimation of dense deformation field between S & each frame D_k
+## - this is just a faster version of "transformFusion.py" (i.e. 2.3.2)
+
 # -*- coding: utf-8 -*-
 
 """

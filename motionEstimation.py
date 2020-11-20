@@ -1,4 +1,6 @@
-## [MHH] This code corresponds to sec. 2.3.1 in the [Makki 2019] (rigid motion estimation of each bone between S & each frame D_k), generating rigid transform matrices per bone per frame D_k.
+## [MHH] This code corresponds to sec. 2.3.1 in the [Makki 2019] (rigid motion estimation of each bone between S & each frame D_k), generating rigid transform matrices per bone per frame D_k. (i.e. propagating bone segmentations from S to each frame in D)
+## - I dind't have access to Makki's data, so I tried it on a dataset of ours (s4_2)
+## - I call this script from the WSL bash (as the FSL library was installed there - it has no binaries for windows)
 
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
@@ -151,13 +153,16 @@ def Binarize_fuzzy_mask(fuzzy_mask, binary_mask, threshold):
     return 0
 
 
-if __name__ == '__main__':
+######################################################################################
+######################################################################################
+######################################################################################
 
+if __name__ == '__main__':
     ## global FLIRT params
     fnl_intrpl = 'nearestneighbour'       # {trilinear, nearestneighbour (org in this script),sinc,spline}
 
 
-
+    ##
     print(".\n.\n.")
     parser = argparse.ArgumentParser(prog='dynMRI')
 
@@ -177,14 +182,10 @@ if __name__ == '__main__':
         call_flirt = 'fsl5.0-flirt'
         call_fslsplit = 'fsl5.0-fslsplit'
 
-    # (MHH) to run Linux & also specifically FSL commands inside windows (or actually WSL) -> invoke the WSL bash in the "run" mode
-    wsl_bash_run_lnx_cmds = '"' + r'C:\Program Files\WindowsApps\CanonicalGroupLimited.Ubuntu18.04onWindows_1804.2020.824.0_x64__79rhkp1fndgsc\ubuntu1804.exe' + '"' + ' ' + 'run' + ' '
+    ## (MHH) to run Linux & also specifically FSL commands inside windows (or actually WSL) -> invoke the WSL bash in the "run" mode
+    # wsl_bash_run_lnx_cmds = '"' + r'C:\Program Files\WindowsApps\CanonicalGroupLimited.Ubuntu18.04onWindows_1804.2020.824.0_x64__79rhkp1fndgsc\ubuntu1804.exe' + '"' + ' ' + 'run' + ' '
     # wsl_bash_run_fsl_cmds = wsl_bash_run_lnx_cmds + '/usr/local/fsl/etc/fslconf/fsl.sh' + ' && ' + ' echo $FSLOUTPUTTYPE ' + ' && ' + '/usr/local/fsl/bin/'       # concatenate the path where the FSL bins were installed by fslinstaller.py
-    wsl_bash_run_fsl_cmds = wsl_bash_run_lnx_cmds + 'FSLOUTPUTTYPE=NIFTI_GZ' + ' && ' + '/usr/local/fsl/bin/'       # concatenate the path where the FSL bins were installed by fslinstaller.py
-
-    # TEST - to delete
-    # temp = wsl_bash_run_lnx_cmds + "echo 'hello'" + ' && ' + "echo 'world'"
-    # subprocess.run(temp)
+    # wsl_bash_run_fsl_cmds = wsl_bash_run_lnx_cmds + 'FSLOUTPUTTYPE=NIFTI_GZ' + ' && ' + '/usr/local/fsl/bin/'       # concatenate the path where the FSL bins were installed by fslinstaller.py --> ERROR: didn't run. So, I resorted to calling this script from the bash itself inside WSL
 
 #######################Output path creation##########################
 
@@ -444,8 +445,7 @@ if __name__ == '__main__':
 ######################## Backward propagation (starting from D_{k^*} to the begin of D) ##############################
         print("\t-> Backward propagation (using FLIRT)..")
         t = t__closest_to_S
-        # TODO: i changed it to include 0. Why did he excluded 0 (i.e. first time frams in the low-res dynamic sequence)?
-        # while(t>0):
+        # while(t>0):           # I changed it to include 0. Why did he excluded 0 (i.e. first time frams in the low-res dynamic sequence)?
         while(t>=0):
             # print(f"\t\tframe {t}..", end='\r')
             final_refweightSet.sort()

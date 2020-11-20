@@ -30,7 +30,6 @@
   knowledge of the CeCILL-B license and that you accept its terms.
 """
 
-
 from scipy import ndimage
 import nibabel as nib
 import numpy as np
@@ -43,12 +42,9 @@ from numpy import newaxis
 import itertools
 from scipy.ndimage.filters import gaussian_filter
 from scipy.ndimage.interpolation import map_coordinates
+from timeit import default_timer as timer
 #from scipy.ndimage.morphology import binary_erosion
-
 import multiprocessing
-
-
-
 
 
 def Text_file_to_matrix(filename):
@@ -57,18 +53,15 @@ def Text_file_to_matrix(filename):
 
    return np.mat(T)
 
-
 def Matrix_to_text_file(matrix, text_filename):
 
     np.savetxt(text_filename, matrix, delimiter='  ')
-
 
 def nifti_to_array(filename):
 
     nii = nib.load(filename)
 
     return (nii.get_data())
-
 
 def nifti_image_shape(filename):
 
@@ -77,104 +70,100 @@ def nifti_image_shape(filename):
 
     return (data.shape)
 
-
 def get_header_from_nifti_file(filename):
 
     nii = nib.load(filename)
 
     return nii.header
 
-'''
-Define the sigmoid function,  which smooths the  slope of the  weight map near the wire.
-Parameters
-----------
-x : N dimensional array
-Returns
--------
-output : array
-  N_dimensional array containing sigmoid function result
-
-'''
-
 def sigmoid(x):
-  return 1 / (1 + np.exp(np.negative(x)))
+    '''
+    Define the sigmoid function,  which smooths the  slope of the  weight map near the wire.
+    Parameters
+    ----------
+    x : N dimensional array
+    Returns
+    -------
+    output : array
+      N_dimensional array containing sigmoid function result
 
-
-"""
-compute the  associated weighting function to a binary mask (a region in the reference image)
-Parameters
-----------
-component : array of data (binary mask)
-Returns
--------
-output : array
-  N_dimensional array containing the weighting function value for each voxel according to the entered mask, convolved with a Gaussian kernel
-  with a standard deviation set to 2 voxels inorder to take into account the partial volume effect due to anisotropy of the image resolution
-"""
+    '''
+    return 1 / (1 + np.exp(np.negative(x)))
 
 def component_weighting_function(data):
-
+    """
+    compute the associated weighting function to a binary mask (a region in the reference image)
+    Parameters
+    ----------
+    component : array of data (binary mask)
+    Returns
+    -------
+    output : array
+      N_dimensional array containing the weighting function value for each voxel according to the entered mask, convolved with a Gaussian kernel
+      with a standard deviation set to 2 voxels inorder to take into account the partial volume effect due to anisotropy of the image resolution
+    """
     np.subtract(np.max(data), data, data)
     #return 1/(1+0.5*ndimage.distance_transform_edt(data)**2)
     return 2/(1+np.exp(0.1*ndimage.distance_transform_edt(data)))
 
-
-"""
-transform a point from image 1 to image 2 using a flirt transform matrix
-Parameters
-----------
-x,y,z : the point voxel coordinates in image 1
-input_header : image1 header
-reference_header : image2 header
-transform : ndarray
-  flirt transformation, as a 2D array (matrix)
-Returns
--------
-output : array
-  An array 1*3 containing the output point voxel coordinates in image 2
-"""
-
-
-
 def warp_point_using_flirt_transform(x,y,z,input_header, reference_header, transform):
-# flip [x,y,z] if necessary (based on the sign of the sform or qform determinant)
-	if np.sign(det(input_header.get_sform()))==1:
-		x = input_header.get_data_shape()[0]-1-x
-		y = input_header.get_data_shape()[1]-1-y
-		z = input_header.get_data_shape()[2]-1-z
+    """
+    transform a point from image 1 to image 2 using a flirt transform matrix
+    Parameters
+    ----------
+    x,y,z : the point voxel coordinates in image 1
+    input_header : image1 header
+    reference_header : image2 header
+    transform : ndarray
+      flirt transformation, as a 2D array (matrix)
+    Returns
+    -------
+    output : array
+      An array 1*3 containing the output point voxel coordinates in image 2
+    """
+    # flip [x,y,z] if necessary (based on the sign of the sform or qform determinant)
+    if np.sign(det(input_header.get_sform()))==1:
+        x = input_header.get_data_shape()[0]-1-x
+        y = input_header.get_data_shape()[1]-1-y
+        z = input_header.get_data_shape()[2]-1-z
 
-#scale the values by multiplying by the corresponding voxel sizes (in mm)
-	point=np.ones(4)
-	point[0] = x*input_header.get_zooms()[0]
-	point[1] = y*input_header.get_zooms()[1]
-	point[2] = z*input_header.get_zooms()[2]
-# apply the FLIRT matrix to map to the reference space
-	point = np.dot(transform, point)
+    #scale the values by multiplying by the corresponding voxel sizes (in mm)
+    point=np.ones(4)
+    point[0] = x*input_header.get_zooms()[0]
+    point[1] = y*input_header.get_zooms()[1]
+    point[2] = z*input_header.get_zooms()[2]
+    # apply the FLIRT matrix to map to the reference space
+    point = np.dot(transform, point)
 
-#divide by the corresponding voxel sizes (in mm, of the reference image this time)
-	point[0] = point[0]/reference_header.get_zooms()[0]
-	point[1] = point[1]/reference_header.get_zooms()[1]
-	point[2] = point[2]/reference_header.get_zooms()[2]
+    #divide by the corresponding voxel sizes (in mm, of the reference image this time)
+    point[0] = point[0]/reference_header.get_zooms()[0]
+    point[1] = point[1]/reference_header.get_zooms()[1]
+    point[2] = point[2]/reference_header.get_zooms()[2]
 
-#flip the [x,y,z] coordinates (based on the sign of the sform or qform determinant, of the reference image this time)
-	if np.sign(det(reference_header.get_sform()))==1:
-		point[0] = reference_header.get_data_shape()[0]-1-point[0]
-		point[1] = reference_header.get_data_shape()[1]-1-point[1]
-		point[2] = reference_header.get_data_shape()[2]-1-point[2]
+    #flip the [x,y,z] coordinates (based on the sign of the sform or qform determinant, of the reference image this time)
+    if np.sign(det(reference_header.get_sform()))==1:
+        point[0] = reference_header.get_data_shape()[0]-1-point[0]
+        point[1] = reference_header.get_data_shape()[1]-1-point[1]
+        point[2] = reference_header.get_data_shape()[2]-1-point[2]
 
-	return np.transpose(np.absolute(np.delete(point, 3, 0)))
+    return np.transpose(np.absolute(np.delete(point, 3, 0)))
+
+
 
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    print(".\n.\n.")
 
+    parser = argparse.ArgumentParser()
+    ## Input args
     parser.add_argument('-in', '--floating', help='floating input image', type=str, required = True)
-    parser.add_argument('-refweight', '--component', help='', type=str, required = True,action='append')
-    parser.add_argument('-t', '--transform', help='', type=str, required = True,action='append')
+    parser.add_argument('-refweight', '--component', help='bone masks in the target image', type=str, required = True,action='append')
+    parser.add_argument('-t', '--transform', help='bone transforms from source to target image', type=str, required = True,action='append')
+    ## Output args
     parser.add_argument('-o', '--output', help='Output directory', type=str, required = True)
     parser.add_argument('-warped_image', '--outputimage', help='Output image name', type=str, required = True)
-    parser.add_argument('-def_field', '--deformation_field', help='Deformation field image name', type=str, required = True)
+    parser.add_argument('-def_field', '--deformation_field', help='Output Deformation field image name', type=str, required = True)
     #parser.add_argument('-erode', '--eroded', help='binary_erosion kernel size', type=int, required = False)
 
     args = parser.parse_args()
@@ -240,10 +229,11 @@ if __name__ == '__main__':
 ##### create an array of matrices: final_transform(x,y,z)= -∑i  w_norm(i)[x,y,z]*log(T(i)) ########
 
     final_log_transform = np.zeros((dim0, dim1, dim2, 4, 4))
-
     for i in range(0, len(args.transform)):
-
-        np.subtract(final_log_transform, np.multiply(la.logm(Text_file_to_matrix(args.transform[i])).real , nifti_to_array(Normalized_weighting_functionSet[i])[:,:,:,newaxis,newaxis]), final_log_transform)
+        np.subtract(final_log_transform,
+                    np.multiply(la.logm(Text_file_to_matrix(args.transform[i])).real,   # real part of matrix logarithm
+                                nifti_to_array(Normalized_weighting_functionSet[i])[:,:,:,newaxis,newaxis]),
+                    final_log_transform)
 
 
 ######## compute the warped image #################################
@@ -251,33 +241,28 @@ if __name__ == '__main__':
     header_input = get_header_from_nifti_file(args.floating)
 
     def warp_point_log_demons(point):
-
         return(warp_point_using_flirt_transform(point[0] , point[1] , point[2] , header_input , header_input , la.expm(final_log_transform[point[0],point[1],point[2]])))
-
-
-
-    print("warped image computing, please wait ...")
 
 #Generate a list of tuples where each tuple is a combination of parameters: Compute the coordinates in the input image
 #The list will contain all possible combinations of parameters.
 
     input_coordinates = list(itertools.product(range(dim0),range(dim1),range(dim2)))
 
-#Generate processes equal to the number of CPUs
-
+    #Generate processes equal to the number of CPUs
     n_CPU = multiprocessing.cpu_count()
     pool = multiprocessing.Pool(n_CPU)
 
-#Distribute the parameter sets evenly across the cores
-
-    output_coordinates  = pool.map(warp_point_log_demons, input_coordinates)
-
-
-    print("warped image is successfully computed...")
+    # computation
+    start = timer()
+    print("\n-> computing warped image, please wait (multiple processes, FULL CPU utilization !!)...")
+    output_coordinates = pool.map(warp_point_log_demons, input_coordinates)    # Distribute the parameter sets evenly across the cores
+    print("\r Done.")
+    # print("-> (end) computing warped image, please wait (multiple processes, FULL CPU utilization !!) ...")
+    end = timer()
+    print(f"time elapsed: {(end-start)/60} min.\n")
 
     pool.close()
     pool.join()
-
     del final_log_transform
 
 ########### Writing warped image as a nifti file #################
@@ -350,4 +335,4 @@ if __name__ == '__main__':
     nib.save(j, save_path2)
     del input_coordinates
     del output_coordinates
-    print("Deformation field is successfully  saved")
+    print("Deformation field is successfully saved")
