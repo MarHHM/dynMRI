@@ -1,5 +1,8 @@
 #!/bin/bash
 
-cd /mnt/s/datasets/s4_2/
+dataset_path=/mnt/s/datasets/s4_2
+dynSeq__fileName=padded_dynSeq 	# {dynSeq, padded_dynSeq, dynSeq_shorter_8_frms} 
+output__folderName=results--motEst--for_input_padded_dynSeq
 
-python3 /mnt/c/Users/bzfmuham/OneDrive/Knee-Kinematics/Code_and_utils/dynMRI/motionEstimation.py -s im_middle.nii -d im_rest.nii -m masks/im_middle.labels_femur.nii -m masks/im_middle.labels_tibia.nii -m masks/im_middle.labels_patella.nii -o results-at-d-full_seq/
+python3 motionEstimation.py -s ${dataset_path}/im_middle.nii -d ${dataset_path}/${dynSeq__fileName}.nii -m ${dataset_path}/masks/im_middle.labels_femur.nii -m ${dataset_path}/masks/im_middle.labels_tibia.nii -m ${dataset_path}/masks/im_middle.labels_patella.nii -o ${dataset_path}/${output__folderName}/
+

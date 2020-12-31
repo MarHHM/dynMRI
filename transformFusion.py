@@ -151,7 +151,6 @@ def warp_point_using_flirt_transform(x,y,z,input_header, reference_header, trans
 
 
 
-
 if __name__ == '__main__':
     print(".\n.\n.")
 

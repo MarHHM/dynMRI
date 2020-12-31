@@ -159,7 +159,24 @@ def Binarize_fuzzy_mask(fuzzy_mask, binary_mask, threshold):
 
 if __name__ == '__main__':
     ## global FLIRT params
+    n_bones = 3
     fnl_intrpl = 'nearestneighbour'       # {trilinear, nearestneighbour (org in this script),sinc,spline}
+    # DO_GLOBAL_REG = True
+    RSTRCT_GLBL_SRCH_TO_2D = True          # restrict global search to 3 dofs (overrides '-dof') --> trans(x),trans(y),rot(z) --> (much less time)
+    # glbl_rot_srch_rng = np.array([[-40, 40],
+    #                                [-40, 40],
+    #                                [-40, 40]])
+    glbl_rot_srch_rng = np.zeros([3, 2])        # also disable rotational search
+    locl_rot_srch_rng = np.zeros([n_bones, 3, 2])
+    locl_rot_srch_rng[0] = np.array([[-10, 10],     # rotational search range for femur
+                                     [-10, 10],
+                                     [-10, 10]])
+    locl_rot_srch_rng[1] = np.array([[-10, 10],     # rotational search range for tibia (larger around z)
+                                     [-10, 10],
+                                     [-90, 90]])
+    locl_rot_srch_rng[2] = np.array([[-10, 10],     # rotational search range for patella
+                                     [-10, 10],
+                                     [-10, 10]])
 
 
     ##
@@ -246,6 +263,8 @@ if __name__ == '__main__':
 
 ######## Global rigid registration of the static on each time frame (sec 2.3.1->step1->First) #########
 
+    # glbl_rot_srch_rng = np.array([[-40, 40], [-40, 40], [-40, 40]]) if DO_GLOBAL_REG \
+    #                                                                  else np.zeros([3,2])   # disables angular search
     movimage= High_resolution_static
     print("-> Global rigid registration of the static on each time frame (using FLIRT)..")
     # start = timer()
@@ -256,26 +275,26 @@ if __name__ == '__main__':
         global_outputimage = outputpath+'flirt_global_static_on_'+prefix+'.nii.gz'
         global_outputmat = outputpath+'global_static_on_'+prefix+'.mat'
         # go_init = wsl_bash_run_fsl_cmds + call_flirt+' -noresampblur -searchrx -40 40 -searchry -40 40 -searchrz -40 40 -cost mutualinfo  -dof 6 -ref '+refimage+' -in '+movimage+' -out '+global_outputimage+' -omat '+global_outputmat
-        go_init = [call_flirt,  '-noresampblur',
-                                '-searchrx', '-40', '40',
-                                '-searchry', '-40', '40',
-                                '-searchrz', '-40', '40',
-                                '-cost', 'mutualinfo',
-                                '-dof', '6',
-                                '-ref', refimage,
+        go_init = [call_flirt,  '-ref', refimage,
                                 '-in', movimage,
                                 '-out', global_outputimage,
-                                '-omat', global_outputmat]
+                                '-omat', global_outputmat,
+                   ## params
+                                '-dof', '6',  # 6 -> rigid 3d motion
+                                '-noresampblur',
+                                '-searchrx', str(glbl_rot_srch_rng[0][0]), str(glbl_rot_srch_rng[0][1]),
+                                '-searchry', str(glbl_rot_srch_rng[1][0]), str(glbl_rot_srch_rng[1][1]),
+                                '-searchrz', str(glbl_rot_srch_rng[2][0]), str(glbl_rot_srch_rng[2][1]),
+                                '-cost', 'mutualinfo']
+        if RSTRCT_GLBL_SRCH_TO_2D:
+            go_init.append('-2D')
         subprocess.run(go_init)
     print("-> (end) Global rigid registration of the static on each time frame (using FLIRT).\n")
     # end = timer()
     # print(f"time elapsed: {(end-start)/60} min.\n")
 
-#########################################################################
-
     global_matrixSet=glob.glob(outputpath+global_matrix_basename+'*.mat')
     global_matrixSet.sort()
-
     global_imageSet=glob.glob(outputpath+global_image_basename+'*.nii.gz')
     global_imageSet.sort()
 
@@ -290,11 +309,12 @@ if __name__ == '__main__':
             prefix = dynamicSet[t].split('/')[-1].split('.')[0]
             global_mask= outputpath_boneSet[i]+'/global_mask_'+prefix+'_component_'+str(i)+'.nii.gz'
             # go_propagation = wsl_bash_run_fsl_cmds + call_flirt +' -applyxfm -noresampblur -ref '+global_imageSet[t]+' -in ' + args.mask[i] + ' -init '+ global_matrixSet[t] + ' -out ' + global_mask  + ' -interp nearestneighbour '
-            go_propagation = [call_flirt,   '-applyxfm', '-noresampblur',
-                                            '-ref', global_imageSet[t],
+            go_propagation = [call_flirt,   '-ref', global_imageSet[t],
                                             '-in', args.mask[i],
                                             '-init', global_matrixSet[t],
                                             '-out', global_mask,
+                                            '-applyxfm',
+                                            '-noresampblur',
                                             '-interp', fnl_intrpl]
             subprocess.run(go_propagation)
             Binarize_fuzzy_mask(global_mask, global_mask, 0.4)
@@ -320,15 +340,16 @@ if __name__ == '__main__':
             local_outputmat = outputpath_boneSet[i]+'/transform_'+prefix+'_on_global_component_'+str(i)+'.mat'
             #go_init = 'flirt -searchrx -40 40 -searchry -40 40 -searchrz -40 40  -dof 6 -anglerep quaternion  -in '+refimage+' -ref '+global_imageSet[t]+' -out '+local_outputimage+' -omat '+local_outputmat +' -refweight '+ global_maskSet[t]
             # go_init = wsl_bash_run_fsl_cmds + call_flirt +' -searchrx -40 40 -searchry -40 40 -searchrz -40 40 -dof 6 -in '+global_imageSet[t]+' -ref '+refimage+' -out '+local_outputimage+' -omat '+local_outputmat +' -inweight '+ global_maskSet[t]
-            go_init = [call_flirt,  '-searchrx', '-40', '40',
-                                    '-searchry', '-40', '40',
-                                    '-searchrz', '-40', '40',
-                                    '-dof', '6',
-                                    '-in', global_imageSet[t],
+            go_init = [call_flirt,  '-in', global_imageSet[t],
                                     '-ref', refimage,
                                     '-out', local_outputimage,
                                     '-omat', local_outputmat,
-                                    '-inweight', global_maskSet[t]]
+                                    '-inweight', global_maskSet[t],
+                                    ## params
+                                    '-searchrx', str(locl_rot_srch_rng[i][0][0]), str(locl_rot_srch_rng[i][0][1]),
+                                    '-searchry', str(locl_rot_srch_rng[i][1][0]), str(locl_rot_srch_rng[i][1][1]),
+                                    '-searchrz', str(locl_rot_srch_rng[i][2][0]), str(locl_rot_srch_rng[i][2][1]),
+                                    '-dof', '6']
 
 ###################### Talus registration (Makki used (-cost normcorr) for this case specifically ) ################################
             # # (MHH) i commented this part
